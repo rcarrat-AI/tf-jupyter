@@ -30,17 +30,18 @@ sudo echo "c.NotebookApp.ip = '$public_hostname'" >> "$config_file"
 sudo echo "c.NotebookApp.allow_origin = '*'" >> "$config_file"
 sudo echo "c.NotebookApp.open_browser = False" >> "$config_file"
 
-# Install Tensorflow with Conda
-conda init
-conda create -y -n tf-gpu tensorflow-gpu 
 
-# For Tesla A10
-# export BASE_URL=https://us.download.nvidia.com/tesla
-# export DRIVER_VERSION=535.104.05
-# sudo curl -fSsl -O $BASE_URL/$DRIVER_VERSION/NVIDIA-Linux-x86_64-$DRIVER_VERSION.run
-sudo wget https://us.download.nvidia.com/tesla/535.104.05/NVIDIA-Linux-x86_64-535.104.05.run -O /home/ec2-user/NVIDIA-Linux-x86_64-535.104.05.run &&
-    sudo bash /home/ec2-user/NVIDIA-Linux-x86_64-535.104.05.run -s
-# Test that works
-nvidia-smi > /home/ec2-user/nvidia-smi
 
 wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templates/demo/gpu-check.ipynb -O /home/ec2-user/gpu-check.ipynb
+
+/anaconda3/bin/activate && conda init
+sudo /anaconda3/bin/conda install -c conda-forge tensorflow -y
+sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
+python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.*
+# pip install tensorflow 
+# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Test that works
+nvidia-smi > /home/ec2-user/nvidia-smi
+echo "/anaconda3/bin/activate && source activate base" > /home/ec2-user/usage
+echo "done!"

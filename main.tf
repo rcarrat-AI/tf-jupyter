@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 4.0"
+      version = "~> 5.0"
     }
   }
 }
@@ -13,4 +13,10 @@ provider "aws" {
   # secret_key = "${var.secret_key}"
   profile = "default"
 
+}
+
+locals {
+  tags = {
+    Name = var.name
+  }
 }

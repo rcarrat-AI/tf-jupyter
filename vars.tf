@@ -1,10 +1,10 @@
 variable "availability_zones" {
   type    = list(any)
-  default = ["us-east-2a"]
+  default = ["eu-west-1a"]
 }
 
 variable "aws_region" {
-  default = "us-east-2"
+  default = "eu-west-1"
 }
 
 variable "instance_type" {
@@ -31,7 +31,7 @@ variable "private_subnet_cidrs" {
 
 variable "spot_price" {
   type    = string
-  default = "0.3636"
+  default = "1  "
 }
 
 variable "ebs_disk_size" {
@@ -39,4 +39,12 @@ variable "ebs_disk_size" {
   default = "100"
 }
 
+variable "block_duration_minutes" {
+  type    = string
+  default = "240"
+}
 
+variable "ami_tf" {
+  type    = string
+  default = "ami-0ddafa3752da513f6"
+}
