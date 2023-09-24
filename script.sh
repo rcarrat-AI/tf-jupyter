@@ -11,6 +11,7 @@ sudo yum update -y
 sudo mkfs.xfs /dev/sdb -f
 sudo mkdir /anaconda3
 sudo mount /dev/sdb /anaconda3
+sudo nvidia-ctk runtime configure # Enable Nvidia Docker Container Toolkit
 sudo chown -R ec2-user:ec2-user /anaconda3
 sudo echo "UUID=$(lsblk -nr -o UUID,MOUNTPOINT | grep "/anaconda3" | cut -d ' ' -f 1) /anaconda3 xfs defaults,nofail 1 2" >> /etc/fstab
 # Install Anaconda
@@ -30,8 +31,6 @@ sudo echo "c.NotebookApp.ip = '$public_hostname'" >> "$config_file"
 sudo echo "c.NotebookApp.allow_origin = '*'" >> "$config_file"
 sudo echo "c.NotebookApp.open_browser = False" >> "$config_file"
 
-
-
 wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templates/demo/gpu-check.ipynb -O /home/ec2-user/gpu-check.ipynb
 
 /anaconda3/bin/activate && conda init
@@ -44,4 +43,69 @@ python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.*
 # Test that works
 nvidia-smi > /home/ec2-user/nvidia-smi
 echo "/anaconda3/bin/activate && source activate base" > /home/ec2-user/usage
+
+sudo mkdir /data
+sudo mkfs.xfs /dev/nvme2n1
+sudo echo "/dev/nvme2n1 /data xfs defaults,nofail 1 2" >> /etc/fstab
+
+# Install Kind and Kubectl
+[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+sudo chmod 775 ./kind
+sudo mv ./kind /usr/local/bin/kind
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Add GPU Support
+# https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
+sudo sed -i 's/^#accept-nvidia-visible-devices-as-volume-mounts = false/accept-nvidia-visible-devices-as-volume-mounts = true/' /etc/nvidia-container-runtime/config.toml
+
+# Deploy Kind Cluster with GPUs
+CLUSTER_NAME="k8s"
+cat <<EOF | kind create cluster --name $CLUSTER_NAME --wait 200s --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+  extraMounts:
+    - hostPath: /dev/null
+      containerPath: /var/run/nvidia-container-devices/all
+EOF
+
+## Add Nvidia GPU Operator
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia || true
+helm repo update
+helm install --wait --generate-name \
+     -n gpu-operator --create-namespace \
+     nvidia/gpu-operator --set driver.enabled=false
+
+# Deploy Pod to Check nvidia-smi
+sleep 100
+cat <<EOF | kubectl create -f -
+ apiVersion: v1
+ kind: Pod
+ metadata:
+   name: vectoradd
+ spec:
+   restartPolicy: OnFailure
+   containers:
+   - name: vectoradd
+     image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda10.2
+EOF
+
+sleep 20
+kubectl exec -ti vectoradd -- nvidia-smi
+
 echo "done!"
