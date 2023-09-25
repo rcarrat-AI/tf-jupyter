@@ -1,7 +1,8 @@
 #!/bin/bash
 sleep 1m
-# Log stdout to file
-exec 3>&1 4>&2
+
+## Startup
+exec 3>&1 4>&2 # Log stdout to file
 trap 'exec 2>&4 1>&3' 0 1 2 3
 exec 1>/home/ec2-user/terraform.log 2>&1
 # Update AL2
@@ -38,7 +39,7 @@ sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11
 source activate base
 python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
 
-# Test that works
+## Test that works
 nvidia-smi > /home/ec2-user/nvidia-smi
 echo "/anaconda3/bin/activate && source activate base && kind export kubeconfig --name k8s" > /home/ec2-user/usage
 
@@ -56,13 +57,13 @@ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scrip
 sudo chmod 700 get_helm.sh
 bash get_helm.sh
 
-# Add GPU Support
-# https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
+## Add GPU Support
+## https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
 sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
 sudo systemctl restart docker
 sudo sed -i '/accept-nvidia-visible-devices-as-volume-mounts/c\accept-nvidia-visible-devices-as-volume-mounts = true' /etc/nvidia-container-runtime/config.toml
 
-# Deploy Kind Cluster with GPUs
+## Deploy Kind Cluster with GPUs
 CLUSTER_NAME="k8s"
 cat <<EOF | kind create cluster --name $CLUSTER_NAME --wait 200s --config=-
 kind: Cluster
@@ -86,9 +87,10 @@ nodes:
     - hostPath: /dev/null
       containerPath: /var/run/nvidia-container-devices/all
 EOF
-
 kind export kubeconfig --name k8s
 
+## Workaround for GPU support in KIND
+## https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
 sleep 60
 docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
 
@@ -118,6 +120,7 @@ EOF
 
 sleep 20
 kubectl exec -ti cuda-vectoradd -- nvidia-smi
+kubectl logs cuda-vectoradd >> /home/ec2-user/kind-gpu
 
 wget https://raw.githubusercontent.com/substratusai/substratus/main/install/kind/up-gpu.sh
 

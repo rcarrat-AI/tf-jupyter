@@ -8,7 +8,7 @@ variable "aws_region" {
 }
 
 variable "instance_type" {
-  default = "g5.2xlarge"
+  default = "g5.xlarge"
 }
 
 variable "name" {

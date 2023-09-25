@@ -40,4 +40,6 @@ resource "aws_ec2_tag" "jupyter" {
   resource_id = module.ec2_instance.0.spot_instance_id
   key         = "Name"
   value       = "JaaS"
+
+  depends_on = [module.ec2_instance]
 }
