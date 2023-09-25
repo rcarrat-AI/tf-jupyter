@@ -8,6 +8,13 @@ output "ec2_spot_instance_public_ip" {
   value       = module.ec2_instance[*].public_ip
 }
 
+output "spot_instance_id" {
+  description = "The Instance ID (if any) that is currently fulfilling the Spot Instance request"
+  value       = module.ec2_instance.0.spot_instance_id
+}
+
+
+
 ## On-Demand
 # output "jupyter_ip" {
 

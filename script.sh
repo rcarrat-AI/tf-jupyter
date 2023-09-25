@@ -11,7 +11,6 @@ sudo yum update -y
 sudo mkfs.xfs /dev/sdb -f
 sudo mkdir /anaconda3
 sudo mount /dev/sdb /anaconda3
-sudo nvidia-ctk runtime configure # Enable Nvidia Docker Container Toolkit
 sudo chown -R ec2-user:ec2-user /anaconda3
 sudo echo "UUID=$(lsblk -nr -o UUID,MOUNTPOINT | grep "/anaconda3" | cut -d ' ' -f 1) /anaconda3 xfs defaults,nofail 1 2" >> /etc/fstab
 # Install Anaconda
@@ -36,28 +35,32 @@ wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templat
 /anaconda3/bin/activate && conda init
 sudo /anaconda3/bin/conda install -c conda-forge tensorflow -y
 sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
-python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.*
-# pip install tensorflow 
-# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+source activate base
+python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
 
 # Test that works
 nvidia-smi > /home/ec2-user/nvidia-smi
-echo "/anaconda3/bin/activate && source activate base" > /home/ec2-user/usage
+echo "/anaconda3/bin/activate && source activate base && kind export kubeconfig --name k8s" > /home/ec2-user/usage
 
 sudo mkdir /data
 sudo mkfs.xfs /dev/nvme2n1
 sudo echo "/dev/nvme2n1 /data xfs defaults,nofail 1 2" >> /etc/fstab
 
-# Install Kind and Kubectl
+# Install Kind,  Kubectl and Helm
 [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
 sudo chmod 775 ./kind
 sudo mv ./kind /usr/local/bin/kind
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+sudo chmod 700 get_helm.sh
+bash get_helm.sh
 
 # Add GPU Support
 # https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
-sudo sed -i 's/^#accept-nvidia-visible-devices-as-volume-mounts = false/accept-nvidia-visible-devices-as-volume-mounts = true/' /etc/nvidia-container-runtime/config.toml
+sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
+sudo systemctl restart docker
+sudo sed -i '/accept-nvidia-visible-devices-as-volume-mounts/c\accept-nvidia-visible-devices-as-volume-mounts = true' /etc/nvidia-container-runtime/config.toml
 
 # Deploy Kind Cluster with GPUs
 CLUSTER_NAME="k8s"
@@ -84,6 +87,11 @@ nodes:
       containerPath: /var/run/nvidia-container-devices/all
 EOF
 
+kind export kubeconfig --name k8s
+
+sleep 60
+docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
+
 ## Add Nvidia GPU Operator
 helm repo add nvidia https://helm.ngc.nvidia.com/nvidia || true
 helm repo update
@@ -92,20 +100,25 @@ helm install --wait --generate-name \
      nvidia/gpu-operator --set driver.enabled=false
 
 # Deploy Pod to Check nvidia-smi
-sleep 100
-cat <<EOF | kubectl create -f -
- apiVersion: v1
- kind: Pod
- metadata:
-   name: vectoradd
- spec:
-   restartPolicy: OnFailure
-   containers:
-   - name: vectoradd
-     image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda10.2
+sleep 200
+kubectl apply -f - << EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cuda-vectoradd
+spec:
+  restartPolicy: OnFailure
+  containers:
+  - name: cuda-vectoradd
+    image: "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubuntu20.04"
+    resources:
+      limits:
+        nvidia.com/gpu: 1
 EOF
 
 sleep 20
-kubectl exec -ti vectoradd -- nvidia-smi
+kubectl exec -ti cuda-vectoradd -- nvidia-smi
+
+wget https://raw.githubusercontent.com/substratusai/substratus/main/install/kind/up-gpu.sh
 
 echo "done!"

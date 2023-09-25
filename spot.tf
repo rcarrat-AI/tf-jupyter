@@ -13,8 +13,8 @@ module "ec2_instance" {
   associate_public_ip_address = true
 
   create_spot_instance = true
-  spot_price           = var.spot_price
-  spot_type            = "persistent"
+  # spot_price           = var.spot_price
+  spot_type = "persistent"
 
   root_block_device = [
     {
@@ -33,4 +33,11 @@ module "ec2_instance" {
   ]
 
   tags = local.tags
+
+}
+
+resource "aws_ec2_tag" "jupyter" {
+  resource_id = module.ec2_instance.0.spot_instance_id
+  key         = "Name"
+  value       = "JaaS"
 }
