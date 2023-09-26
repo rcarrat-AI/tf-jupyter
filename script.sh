@@ -1,13 +1,15 @@
 #!/bin/bash
 sleep 1m
 
-## Startup
+## Installing Pre-requisites
 exec 3>&1 4>&2 # Log stdout to file
 trap 'exec 2>&4 1>&3' 0 1 2 3
 exec 1>/home/ec2-user/terraform.log 2>&1
 # Update AL2
 sudo yum install gcc make kernel-devel-$(uname -r) git -y
 sudo yum update -y
+
+## Install Anaconda
 # Mount /anaconda3
 sudo mkfs.xfs /dev/sdb -f
 sudo mkdir /anaconda3
@@ -19,9 +21,10 @@ wget https://repo.anaconda.com/archive/Anaconda3-2023.07-2-Linux-x86_64.sh -O /h
     bash /home/ec2-user/anaconda.sh -u -b -p /anaconda3 &&
     echo 'export PATH="/anaconda3/bin:$PATH"' >> /home/ec2-user/.bashrc &&
     rm -rf /home/ec2-user/anaconda.sh &&
+
+## Configure Jupyter Notebook
 # Configure Jupyter for AWS HTTP
 runuser -l ec2-user -c 'jupyter notebook --generate-config'
-
 # Fetch the public hostname
 public_hostname=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)
 # Update the Jupyter Notebook config file
@@ -31,34 +34,44 @@ sudo echo "c.NotebookApp.ip = '$public_hostname'" >> "$config_file"
 sudo echo "c.NotebookApp.allow_origin = '*'" >> "$config_file"
 sudo echo "c.NotebookApp.open_browser = False" >> "$config_file"
 
-wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templates/demo/gpu-check.ipynb -O /home/ec2-user/gpu-check.ipynb
-
+## Install Conda Tensorflow, Torch and Nvidia CUNN
 /anaconda3/bin/activate && conda init
 sudo /anaconda3/bin/conda install -c conda-forge tensorflow -y
 sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
-source activate base
-python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
+source activate base && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
 
-## Test that works
+## Test Jupyter-Notebook and Prepare for Usage
 nvidia-smi > /home/ec2-user/nvidia-smi
-echo "/anaconda3/bin/activate && source activate base && kind export kubeconfig --name k8s" > /home/ec2-user/usage
+wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templates/demo/gpu-check.ipynb -O /home/ec2-user/gpu-check.ipynb
+echo "/anaconda3/bin/activate \
+  && source activate base \
+  && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit \
+  && kind export kubeconfig --name k8s" > /home/ec2-user/usage
 
+## Mount the extra disk
 sudo mkdir /data
 sudo mkfs.xfs /dev/nvme2n1
-sudo echo "/dev/nvme2n1 /data xfs defaults,nofail 1 2" >> /etc/fstab
+sudo su -c "echo '/dev/nvme2n1 /data xfs defaults,nofail 1 2' >> /etc/fstab"
 
-# Install Kind,  Kubectl and Helm
+## Install Kind,  Kubectl and Helm
+# Kind
 [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
 sudo chmod 775 ./kind
 sudo mv ./kind /usr/local/bin/kind
+# Kubectl
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+# Helm
 curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
 sudo chmod 700 get_helm.sh
 bash get_helm.sh
+# k9s
+wget https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_x86_64.tar.gz && tar -xzvf k9s_Linux_x86_64.tar.gz
+sudo chmod u+x k9s && sudo mv /home/ec2-user/k9s /usr/local/bin/k9s
 
 ## Add GPU Support
 ## https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
+wget https://raw.githubusercontent.com/substratusai/substratus/main/install/kind/up-gpu.sh
 sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
 sudo systemctl restart docker
 sudo sed -i '/accept-nvidia-visible-devices-as-volume-mounts/c\accept-nvidia-visible-devices-as-volume-mounts = true' /etc/nvidia-container-runtime/config.toml
@@ -89,9 +102,12 @@ nodes:
 EOF
 kind export kubeconfig --name k8s
 
+
 ## Workaround for GPU support in KIND
 ## https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
-sleep 60
+
+# The nvidia operator needs the below symlink
+# https://github.com/NVIDIA/nvidia-docker/issues/614#issuecomment-423991632
 docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
 
 ## Add Nvidia GPU Operator
@@ -101,7 +117,7 @@ helm install --wait --generate-name \
      -n gpu-operator --create-namespace \
      nvidia/gpu-operator --set driver.enabled=false
 
-# Deploy Pod to Check nvidia-smi
+## Deploy Pod to Check nvidia-smi
 sleep 200
 kubectl apply -f - << EOF
 apiVersion: v1
@@ -118,10 +134,12 @@ spec:
         nvidia.com/gpu: 1
 EOF
 
-sleep 20
-kubectl exec -ti cuda-vectoradd -- nvidia-smi
-kubectl logs cuda-vectoradd >> /home/ec2-user/kind-gpu
+## Sometimes GPU Operator doesn't work because of the ldconfig
+sleep 80
+docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
+kubectl delete all -n gpu-operator
 
-wget https://raw.githubusercontent.com/substratusai/substratus/main/install/kind/up-gpu.sh
+sleep 20
+kubectl logs cuda-vectoradd >> /tmp/ec2-user/kind-gpu
 
 echo "done!"
