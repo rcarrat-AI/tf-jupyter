@@ -137,7 +137,7 @@ EOF
 ## Sometimes GPU Operator doesn't work because of the ldconfig
 sleep 80
 docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
-kubectl delete all -n gpu-operator
+kubectl delete --all pod -n gpu-operator
 
 sleep 20
 kubectl logs cuda-vectoradd >> /tmp/ec2-user/kind-gpu
