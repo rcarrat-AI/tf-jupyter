@@ -43,10 +43,13 @@ source activate base && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tens
 ## Test Jupyter-Notebook and Prepare for Usage
 nvidia-smi > /home/ec2-user/nvidia-smi
 wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templates/demo/gpu-check.ipynb -O /home/ec2-user/gpu-check.ipynb
+sudo touch /home/ec2-user/usage.sh && sudo chmod u+x /home/ec2-user/usage.sh
 echo "/anaconda3/bin/activate \
-  && source activate base \
-  && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit \
-  && kind export kubeconfig --name k8s" > /home/ec2-user/usage
+  && source activate base; \
+  python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit \
+  && kind export kubeconfig --name k8s;
+  docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real || true \
+  && kubectl delete --all pod -n gpu-operator && sleep 100 && kubectl logs cuda-vectoradd >> /tmp/ec2-user/kind-gpu" > /home/ec2-user/usage.sh
 
 ## Mount the extra disk
 sudo mkdir /data
@@ -66,7 +69,7 @@ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scrip
 sudo chmod 700 get_helm.sh
 bash get_helm.sh
 # k9s
-wget https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_x86_64.tar.gz && tar -xzvf k9s_Linux_x86_64.tar.gz
+wget https://github.com/derailed/k9s/releases/download/v0.27.4/k9s_Linux_amd64.tar.gz && tar -xzvf k9s_Linux_amd64.tar.gz
 sudo chmod u+x k9s && sudo mv /home/ec2-user/k9s /usr/local/bin/k9s
 
 ## Add GPU Support
@@ -140,6 +143,6 @@ docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
 kubectl delete --all pod -n gpu-operator
 
 sleep 20
-kubectl logs cuda-vectoradd >> /tmp/ec2-user/kind-gpu
+
 
 echo "done!"
