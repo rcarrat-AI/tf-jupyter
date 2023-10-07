@@ -120,6 +120,9 @@ helm install --wait --generate-name \
      -n gpu-operator --create-namespace \
      nvidia/gpu-operator --set driver.enabled=false
 
+## Deploy NGINX Ingress Controller
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/provider/kind/deploy.yaml
+
 ## Deploy Pod to Check nvidia-smi
 sleep 200
 kubectl apply -f - << EOF
