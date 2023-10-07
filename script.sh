@@ -138,11 +138,10 @@ spec:
 EOF
 
 ## Sometimes GPU Operator doesn't work because of the ldconfig
+bash -x /home/ec2-user/usage.sh
 sleep 80
-docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
-kubectl delete --all pod -n gpu-operator
+#docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real
+#kubectl delete --all pod -n gpu-operator
 
 sleep 20
-
-
 echo "done!"
