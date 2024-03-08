@@ -15,6 +15,10 @@ create:
 destroy:
 	terraform destroy -auto-approve
 
+.PHONY: clean
+clean:
+	rm -rf terraform.tfstate*
+	rm -rf .terraform*
 
 .PHONY: help
 help:
