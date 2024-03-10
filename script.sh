@@ -9,6 +9,11 @@ exec 1>/home/ec2-user/terraform.log 2>&1
 sudo yum install gcc make kernel-devel-$(uname -r) git -y
 sudo yum update -y
 
+## Mount the extra disk
+sudo mkdir /data
+sudo mkfs.xfs /dev/nvme2n1
+sudo su -c "echo '/dev/nvme2n1 /data xfs defaults,nofail 1 2' >> /etc/fstab"
+
 ## Install Anaconda
 # Mount /anaconda3
 sudo mkfs.xfs /dev/sdb -f
@@ -37,6 +42,8 @@ sudo echo "c.NotebookApp.open_browser = False" >> "$config_file"
 ## Install Conda Tensorflow, Torch and Nvidia CUNN
 /anaconda3/bin/activate && conda init
 sudo /anaconda3/bin/conda install -c conda-forge tensorflow -y
+sudo /anaconda3/bin/conda install -c conda-forge langchain -y
+sudo /anaconda3/bin/conda install -c pytorch -c nvidia faiss-gpu=1.8.0 -y
 sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
 source activate base && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
 
@@ -50,11 +57,6 @@ echo "/anaconda3/bin/activate \
   && kind export kubeconfig --name k8s;
   docker exec -ti k8s-control-plane ln -s /sbin/ldconfig /sbin/ldconfig.real || true \
   && kubectl delete --all pod -n gpu-operator && sleep 100 && kubectl logs cuda-vectoradd >> /tmp/ec2-user/kind-gpu" > /home/ec2-user/usage.sh
-
-## Mount the extra disk
-sudo mkdir /data
-sudo mkfs.xfs /dev/nvme2n1
-sudo su -c "echo '/dev/nvme2n1 /data xfs defaults,nofail 1 2' >> /etc/fstab"
 
 ## Install Kind,  Kubectl and Helm
 # Kind
@@ -104,7 +106,6 @@ nodes:
       containerPath: /var/run/nvidia-container-devices/all
 EOF
 kind export kubeconfig --name k8s
-
 
 ## Workaround for GPU support in KIND
 ## https://github.com/kubernetes-sigs/kind/pull/3257#issuecomment-1607287275
