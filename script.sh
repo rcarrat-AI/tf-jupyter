@@ -39,14 +39,6 @@ sudo echo "c.NotebookApp.ip = '$public_hostname'" >> "$config_file"
 sudo echo "c.NotebookApp.allow_origin = '*'" >> "$config_file"
 sudo echo "c.NotebookApp.open_browser = False" >> "$config_file"
 
-## Install Conda Tensorflow, Torch and Nvidia CUNN
-/anaconda3/bin/activate && conda init
-sudo /anaconda3/bin/conda install -c conda-forge tensorflow -y
-sudo /anaconda3/bin/conda install -c conda-forge langchain -y
-sudo /anaconda3/bin/conda install -c pytorch -c nvidia faiss-gpu=1.8.0 -y
-sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
-source activate base && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
-
 ## Test Jupyter-Notebook and Prepare for Usage
 nvidia-smi > /home/ec2-user/nvidia-smi
 wget https://raw.githubusercontent.com/rcarrat-AI/nvidia-odh-gitops/main/templates/demo/gpu-check.ipynb -O /home/ec2-user/gpu-check.ipynb
@@ -140,6 +132,14 @@ spec:
       limits:
         nvidia.com/gpu: 1
 EOF
+
+## Install Conda Tensorflow, Torch and Nvidia CUNN
+/anaconda3/bin/activate && conda init
+sudo /anaconda3/bin/conda install -c conda-forge tensorflow -y
+sudo /anaconda3/bin/conda install -c conda-forge langchain -y
+sudo /anaconda3/bin/conda install -c pytorch -c nvidia faiss-gpu=1.8.0 -y
+sudo /anaconda3/bin/conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
+source activate base && python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.* cmake lit
 
 ## Sometimes GPU Operator doesn't work because of the ldconfig
 bash -x /home/ec2-user/usage.sh
